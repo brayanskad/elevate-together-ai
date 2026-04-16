@@ -1,333 +1,261 @@
-import { BrandHeader } from "@/components/BrandHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { BRLogo } from "@/components/BRLogo";
 import {
-  Bot, User, Send, Sparkles, CheckCircle2, AlertTriangle,
-  Wand2, Recycle, ArrowRight, Loader2
+  Lock, ArrowLeft, ArrowRight, Check, HelpCircle, X,
+  Accessibility, MessageSquare, Monitor, Heart, Plus, MoreHorizontal,
+  Sparkles, AlertCircle
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
-type Step = {
+type StepDef = {
   id: string;
   pergunta: string;
-  placeholder: string;
-  hint?: string;
+  tipo: "yesno" | "options";
+  opcoes?: { label: string; sub: string; icon: any; bg: string; iconColor: string }[];
 };
 
-const steps: Step[] = [
+const stepDefs: StepDef[] = [
   {
-    id: "contexto",
-    pergunta: "Olá! 👋 Sou a assistente da InclusivAI. Para começar, em qual contexto a barreira foi identificada?",
-    placeholder: "Ex: Sala de reuniões, processo seletivo, plataforma interna...",
-    hint: "Foque no AMBIENTE, não na pessoa.",
+    id: "interesse",
+    pergunta: "Você gostaria de apoio relacionado a acessibilidade ou inclusão?",
+    tipo: "yesno",
   },
   {
-    id: "descricao",
-    pergunta: "Descreva o que está dificultando o acesso ou a participação. Pode ser livre — eu ajudo a organizar.",
-    placeholder: "Conte com suas palavras o que aconteceu...",
-    hint: "Use linguagem inclusiva. Vou sugerir melhorias se necessário.",
+    id: "necessidade",
+    pergunta: "Qual dessas situações mais se aproxima da sua necessidade?",
+    tipo: "options",
+    opcoes: [
+      { label: "Acesso físico", sub: "Locomoção, estrutura, espaço", icon: Accessibility, bg: "bg-success/15", iconColor: "text-success" },
+      { label: "Comunicação", sub: "Intérprete, linguagem", icon: MessageSquare, bg: "bg-info/10", iconColor: "text-info" },
+      { label: "Tecnologia", sub: "Sistemas, acessibilidade digital", icon: Monitor, bg: "bg-accent/20", iconColor: "text-accent-foreground" },
+      { label: "Ambiente de trabalho", sub: "Respeito, comportamento", icon: Heart, bg: "bg-info/10", iconColor: "text-info" },
+      { label: "Saúde / Bem-estar", sub: "Apoio e qualidade de vida", icon: Plus, bg: "bg-destructive/10", iconColor: "text-destructive" },
+      { label: "Outro", sub: "Não está listado", icon: MoreHorizontal, bg: "bg-muted", iconColor: "text-muted-foreground" },
+    ],
   },
   {
     id: "frequencia",
-    pergunta: "Isso acontece com qual frequência?",
-    placeholder: "Ex: Diariamente, em reuniões semanais, esporadicamente...",
+    pergunta: "Com que frequência você enfrenta essa situação?",
+    tipo: "options",
+    opcoes: [
+      { label: "Diariamente", sub: "Acontece todos os dias", icon: AlertCircle, bg: "bg-destructive/10", iconColor: "text-destructive" },
+      { label: "Semanalmente", sub: "Algumas vezes por semana", icon: AlertCircle, bg: "bg-accent/20", iconColor: "text-accent-foreground" },
+      { label: "Esporadicamente", sub: "De vez em quando", icon: AlertCircle, bg: "bg-info/10", iconColor: "text-info" },
+      { label: "Primeira vez", sub: "Nunca tinha acontecido", icon: AlertCircle, bg: "bg-success/15", iconColor: "text-success" },
+    ],
   },
   {
-    id: "impacto",
-    pergunta: "Quem é impactado por essa barreira? (sem identificar pessoas)",
-    placeholder: "Ex: Equipe da unidade X, candidatos do processo Y...",
+    id: "urgencia",
+    pergunta: "Qual o nível de urgência?",
+    tipo: "options",
+    opcoes: [
+      { label: "Alta", sub: "Impede meu trabalho/atividade", icon: AlertCircle, bg: "bg-destructive/10", iconColor: "text-destructive" },
+      { label: "Média", sub: "Dificulta, mas consigo seguir", icon: AlertCircle, bg: "bg-accent/20", iconColor: "text-accent-foreground" },
+      { label: "Baixa", sub: "É um incômodo pontual", icon: AlertCircle, bg: "bg-success/15", iconColor: "text-success" },
+    ],
+  },
+  {
+    id: "contato",
+    pergunta: "Como prefere ser contatado(a) pela equipe responsável?",
+    tipo: "options",
+    opcoes: [
+      { label: "E-mail corporativo", sub: "Resposta formal documentada", icon: MessageSquare, bg: "bg-info/10", iconColor: "text-info" },
+      { label: "Chat da plataforma", sub: "Conversa rápida e direta", icon: MessageSquare, bg: "bg-success/15", iconColor: "text-success" },
+      { label: "Telefone", sub: "Ligação da área responsável", icon: MessageSquare, bg: "bg-accent/20", iconColor: "text-accent-foreground" },
+    ],
   },
 ];
 
-// Detecção simples de linguagem inadequada (mock IA)
-const checkLanguage = (text: string): { sugestao: string; trocas: string[] } | null => {
-  const replacements: Record<string, string> = {
-    "deficiente": "pessoa com deficiência",
-    "portador": "pessoa com",
-    "aleijado": "pessoa com deficiência física",
-    "mudo": "pessoa surda",
-    "surdo-mudo": "pessoa surda",
-    "cego": "pessoa com deficiência visual",
-    "retardado": "pessoa com deficiência intelectual",
-    "normal": "pessoa sem deficiência",
-    "especial": "com deficiência",
-  };
-  let sugestao = text;
-  const trocas: string[] = [];
-  Object.entries(replacements).forEach(([k, v]) => {
-    const re = new RegExp(`\\b${k}\\b`, "gi");
-    if (re.test(sugestao)) {
-      sugestao = sugestao.replace(re, v);
-      trocas.push(`"${k}" → "${v}"`);
-    }
-  });
-  return trocas.length ? { sugestao, trocas } : null;
-};
-
 const Triagem = () => {
   const [params] = useSearchParams();
-  const tipo = (params.get("tipo") || "interno") as "interno" | "externo";
-  const isExterno = tipo === "externo";
+  const tipo = params.get("tipo") || "interno";
+  const navigate = useNavigate();
 
   const [stepIdx, setStepIdx] = useState(0);
-  const [input, setInput] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [messages, setMessages] = useState<Array<{ role: "bot" | "user" | "system"; content: string; alert?: { trocas: string[]; sugestao: string; original: string } }>>([
-    { role: "bot", content: steps[0].pergunta },
-  ]);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [done, setDone] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [yesnoAnswer, setYesnoAnswer] = useState<string | null>(null);
 
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, analyzing]);
+  const total = stepDefs.length;
+  const step = stepDefs[stepIdx];
+  const progress = ((stepIdx + 1) / total) * 100;
+  const currentAnswer = answers[step.id];
 
-  const progress = done ? 100 : (stepIdx / steps.length) * 100;
-
-  const handleSend = () => {
-    if (!input.trim()) return;
-    const current = steps[stepIdx];
-    const userText = input.trim();
-    setInput("");
-
-    const newMessages: typeof messages = [...messages, { role: "user" as const, content: userText }];
-
-    // Verifica linguagem
-    const check = stepIdx === 1 ? checkLanguage(userText) : null;
-    if (check) {
-      newMessages.push({
-        role: "system",
-        content: "",
-        alert: { trocas: check.trocas, sugestao: check.sugestao, original: userText },
-      });
+  const handleNext = () => {
+    if (step.tipo === "yesno" && yesnoAnswer) {
+      setAnswers({ ...answers, [step.id]: yesnoAnswer });
     }
-
-    setAnswers(prev => ({ ...prev, [current.id]: check ? check.sugestao : userText }));
-
-    // Próximo passo ou finaliza
-    if (stepIdx + 1 < steps.length) {
-      newMessages.push({ role: "bot", content: steps[stepIdx + 1].pergunta });
-      setMessages(newMessages);
+    if (stepIdx + 1 < total) {
       setStepIdx(stepIdx + 1);
+      setYesnoAnswer(null);
     } else {
-      setMessages(newMessages);
-      setAnalyzing(true);
-      setTimeout(() => {
-        setAnalyzing(false);
-        setDone(true);
-      }, 1800);
+      navigate("/demanda/1");
     }
   };
 
-  const resumoIA = useMemo(() => {
-    if (!done) return null;
-    return {
-      resumo: `${answers.descricao || "Demanda registrada"} — identificada no contexto de ${answers.contexto || "ambiente corporativo"}. Frequência: ${answers.frequencia || "a verificar"}. Impacto reportado em: ${answers.impacto || "público interno"}.`,
-      classificacao: {
-        tipo: "Visual / Atitudinal",
-        categoria: "Ambiente Físico",
-        atuacao: "Solução estrutural",
-        contexto: answers.contexto || "—",
-      },
-      reaproveitamento: {
-        id: "ACS-2024-0987",
-        titulo: "Sinalização tátil — piloto 8º andar",
-        similaridade: 87,
-      },
-      acao: "Aplicar padrão de sinalização tátil já validado em outra unidade. Revisar contraste dos elementos visuais.",
-      area: "Engenharia & Facilities",
-    };
-  }, [done, answers]);
+  const handleBack = () => {
+    if (stepIdx > 0) {
+      setStepIdx(stepIdx - 1);
+    } else {
+      navigate("/");
+    }
+  };
+
+  const canContinue = step.tipo === "yesno" ? !!yesnoAnswer : !!currentAnswer;
 
   return (
-    <div className={`min-h-screen ${isExterno ? "bg-gradient-to-b from-[hsl(60_50%_97%)] to-background" : "bg-background"}`}>
-      <BrandHeader variant={tipo} right={
-        <Link to="/" className="text-xs text-muted-foreground hover:text-foreground transition-base">
-          ← Voltar
-        </Link>
-      } />
+    <main className="min-h-screen relative overflow-hidden bg-gradient-to-br from-success/5 via-background to-accent/5">
+      {/* Decorative curves */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-30" viewBox="0 0 1200 800" preserveAspectRatio="none">
+        <path d="M0,200 Q300,100 600,250 T1200,200" stroke="hsl(158 60% 40%)" strokeWidth="1.5" fill="none" />
+        <path d="M0,400 Q400,300 700,500 T1200,420" stroke="hsl(48 96% 53%)" strokeWidth="1.5" fill="none" />
+        <path d="M0,600 Q300,520 700,650 T1200,600" stroke="hsl(158 60% 40%)" strokeWidth="1.5" fill="none" />
+      </svg>
 
-      <main className="container max-w-3xl py-6 md:py-10 animate-fade-in">
-        {/* Header + progress */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <h1 className={`font-bold text-foreground ${isExterno ? "text-3xl" : "text-2xl"}`}>
-              Assistente de Triagem
-            </h1>
-            <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 gap-1">
-              <Sparkles className="h-3 w-3" /> IA ativa
-            </Badge>
-          </div>
-          <p className={`text-muted-foreground mb-4 ${isExterno ? "text-base" : "text-sm"}`}>
-            Vou te guiar com algumas perguntas. Foque em descrever o ambiente — não a pessoa.
-          </p>
-          <div className="flex items-center gap-3">
-            <Progress value={progress} className="h-2" />
-            <span className="text-xs font-medium text-muted-foreground tabular-nums w-16 text-right">
-              {done ? "Concluído" : `Etapa ${stepIdx + 1}/${steps.length}`}
-            </span>
-          </div>
-        </div>
-
-        {/* Chat */}
-        <Card className="overflow-hidden shadow-card">
-          <div ref={scrollRef} className="h-[460px] overflow-y-auto p-4 md:p-6 space-y-4 bg-gradient-to-b from-muted/20 to-transparent">
-            {messages.map((m, i) => {
-              if (m.alert) {
-                return (
-                  <div key={i} className="flex justify-center animate-fade-in">
-                    <div className="max-w-[90%] rounded-xl border-2 border-warning/40 bg-warning/10 p-4 space-y-2">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-warning-foreground">
-                        <Wand2 className="h-4 w-4" />
-                        Reformulação sugerida pela IA
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Detectei termos que podem ser substituídos por linguagem mais inclusiva:
-                      </div>
-                      <div className="space-y-1">
-                        {m.alert.trocas.map((t, j) => (
-                          <div key={j} className="text-xs font-mono bg-card/60 rounded px-2 py-1 text-foreground">{t}</div>
-                        ))}
-                      </div>
-                      <div className="text-sm text-foreground bg-card rounded-lg p-3 border border-border">
-                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 font-semibold">Versão reformulada</div>
-                        {m.alert.sugestao}
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-              const isBot = m.role === "bot";
-              return (
-                <div key={i} className={`flex gap-3 animate-slide-in ${isBot ? "" : "flex-row-reverse"}`}>
-                  <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
-                    isBot ? "gradient-primary" : "bg-accent"
-                  }`}>
-                    {isBot
-                      ? <Bot className="h-4 w-4 text-primary-foreground" />
-                      : <User className="h-4 w-4 text-accent-foreground" />}
-                  </div>
-                  <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                    isBot ? "bg-card border border-border rounded-tl-sm" : "bg-primary text-primary-foreground rounded-tr-sm"
-                  }`}>
-                    <p className={`text-sm leading-relaxed ${isBot ? "text-foreground" : ""}`}>{m.content}</p>
-                  </div>
-                </div>
-              );
-            })}
-
-            {analyzing && (
-              <div className="flex gap-3 animate-fade-in">
-                <div className="h-9 w-9 rounded-full gradient-primary flex items-center justify-center shrink-0 shadow-sm">
-                  <Bot className="h-4 w-4 text-primary-foreground" />
-                </div>
-                <div className="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                  <span className="text-sm text-muted-foreground">Analisando, classificando e buscando soluções similares...</span>
-                </div>
-              </div>
-            )}
-
-            {done && resumoIA && (
-              <div className="space-y-3 animate-fade-in">
-                <div className="flex gap-3">
-                  <div className="h-9 w-9 rounded-full gradient-primary flex items-center justify-center shrink-0 shadow-sm">
-                    <CheckCircle2 className="h-4 w-4 text-primary-foreground" />
-                  </div>
-                  <div className="flex-1 space-y-3">
-                    <div className="bg-card border border-border rounded-2xl rounded-tl-sm p-4 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-accent" />
-                        <span className="font-semibold text-sm text-foreground">Resumo gerado pela IA</span>
-                      </div>
-                      <p className="text-sm text-foreground leading-relaxed">{resumoIA.resumo}</p>
-                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border">
-                        <ClassItem label="Tipo" value={resumoIA.classificacao.tipo} />
-                        <ClassItem label="Categoria" value={resumoIA.classificacao.categoria} />
-                        <ClassItem label="Atuação" value={resumoIA.classificacao.atuacao} />
-                        <ClassItem label="Contexto" value={resumoIA.classificacao.contexto} />
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border-2 border-success/30 bg-success/5 p-4 space-y-2">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-success">
-                        <Recycle className="h-4 w-4" />
-                        Solução semelhante encontrada ({resumoIA.reaproveitamento.similaridade}%)
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        <span className="font-mono">{resumoIA.reaproveitamento.id}</span> — {resumoIA.reaproveitamento.titulo}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border border-border bg-card p-4 space-y-2">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Plano de ação sugerido</div>
-                      <p className="text-sm text-foreground">{resumoIA.acao}</p>
-                      <div className="text-xs text-muted-foreground pt-2 border-t border-border">
-                        Será encaminhado para: <strong className="text-primary">{resumoIA.area}</strong>
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-warning/30 bg-warning/5 p-3 flex items-start gap-2">
-                      <AlertTriangle className="h-4 w-4 text-warning-foreground mt-0.5 shrink-0" />
-                      <p className="text-xs text-foreground leading-relaxed">
-                        <strong>Boa prática:</strong> ao tratar essa demanda, oriente a equipe sobre linguagem inclusiva e envolva a pessoa impactada nas decisões.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2 pt-2">
-                  <Button asChild className="gap-2">
-                    <Link to="/demanda/1">Ver card completo da demanda <ArrowRight className="h-4 w-4" /></Link>
-                  </Button>
-                  <Button asChild variant="outline">
-                    <Link to="/dashboard">Ir para o dashboard</Link>
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Input */}
-          {!done && !analyzing && (
-            <div className="border-t border-border bg-card p-4">
-              {steps[stepIdx]?.hint && (
-                <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1.5">
-                  <Sparkles className="h-3 w-3 text-accent" /> {steps[stepIdx].hint}
-                </p>
-              )}
-              <div className="flex gap-2">
-                <Input
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleSend()}
-                  placeholder={steps[stepIdx]?.placeholder}
-                  className={isExterno ? "h-12 text-base" : ""}
-                  autoFocus
-                />
-                <Button onClick={handleSend} disabled={!input.trim()} className="gap-1.5" size={isExterno ? "lg" : "default"}>
-                  <Send className="h-4 w-4" />
-                  Enviar
-                </Button>
-              </div>
+      <div className="relative container max-w-3xl py-8 md:py-12 animate-fade-in">
+        <Card className="p-6 md:p-10 shadow-elegant border border-border/60 rounded-2xl">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <BRLogo size={32} variant="dark" />
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Lock className="h-3.5 w-3.5" />
+              Suas respostas são confidenciais
             </div>
-          )}
+          </div>
+
+          {/* Progress */}
+          <div className="mb-6">
+            <div className="flex gap-1.5 mb-2">
+              {stepDefs.map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-1.5 flex-1 rounded-full transition-base ${
+                    i <= stepIdx ? "bg-primary" : "bg-muted"
+                  }`}
+                />
+              ))}
+            </div>
+            <div className="text-xs text-muted-foreground text-right">
+              Passo {stepIdx + 1} de {total}
+            </div>
+          </div>
+
+          {/* Mascote + título */}
+          <div className="flex items-start gap-4 mb-8 pb-6 border-b border-border">
+            <div className="relative shrink-0">
+              <div className="h-20 w-20 rounded-full bg-gradient-to-br from-success/20 to-accent/15 flex items-center justify-center">
+                <div className="h-14 w-14 rounded-full bg-card shadow-card flex items-center justify-center">
+                  <MessageSquare className="h-6 w-6 text-success" fill="currentColor" />
+                </div>
+              </div>
+              <Sparkles className="absolute -bottom-1 -right-1 h-5 w-5 text-accent" fill="currentColor" />
+            </div>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground tracking-tight">Assistente de Inclusão</h1>
+              <p className="text-muted-foreground mt-1.5 leading-relaxed">
+                Vou te fazer algumas perguntas rápidas para te direcionar
+                <br className="hidden md:block" /> ao programa ou suporte ideal.
+              </p>
+            </div>
+          </div>
+
+          {/* Pergunta */}
+          <div className="space-y-5 animate-fade-in" key={stepIdx}>
+            <div className="flex items-start gap-3">
+              <span className="h-7 w-7 rounded-full bg-primary text-primary-foreground text-sm font-bold flex items-center justify-center shrink-0 mt-0.5">
+                {stepIdx + 1}
+              </span>
+              <h2 className="text-lg font-semibold text-foreground leading-snug pt-1">{step.pergunta}</h2>
+            </div>
+
+            {step.tipo === "yesno" && (
+              <div className="grid grid-cols-3 gap-3 pl-10">
+                <YesNoButton selected={yesnoAnswer === "sim"} onClick={() => setYesnoAnswer("sim")} icon={Check} label="Sim" tone="success" />
+                <YesNoButton selected={yesnoAnswer === "duvida"} onClick={() => setYesnoAnswer("duvida")} icon={HelpCircle} label="Não tenho certeza" tone="muted" />
+                <YesNoButton selected={yesnoAnswer === "nao"} onClick={() => setYesnoAnswer("nao")} icon={X} label="Não" tone="muted" />
+              </div>
+            )}
+
+            {step.tipo === "options" && step.opcoes && (
+              <div className="grid sm:grid-cols-2 gap-3 pl-10">
+                {step.opcoes.map((op) => {
+                  const selected = currentAnswer === op.label;
+                  return (
+                    <button
+                      key={op.label}
+                      onClick={() => setAnswers({ ...answers, [step.id]: op.label })}
+                      className={`flex items-center gap-3 p-3.5 rounded-xl border-2 text-left transition-base ${
+                        selected
+                          ? "border-primary bg-primary/5 shadow-card"
+                          : "border-border bg-card hover:border-primary/40 hover:bg-muted/30"
+                      }`}
+                    >
+                      <div className={`h-11 w-11 rounded-full ${op.bg} flex items-center justify-center shrink-0`}>
+                        <op.icon className={`h-5 w-5 ${op.iconColor}`} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-sm text-foreground">{op.label}</div>
+                        <div className="text-xs text-muted-foreground truncate">{op.sub}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Aviso */}
+          <Card className="mt-7 p-4 bg-accent/8 border-accent/30 flex items-start gap-3">
+            <div className="h-7 w-7 rounded-full bg-accent flex items-center justify-center shrink-0">
+              <AlertCircle className="h-4 w-4 text-accent-foreground" />
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-foreground">Você pode pular perguntas a qualquer momento</div>
+              <div className="text-xs text-muted-foreground mt-0.5">As perguntas sobre identidade são opcionais e confidenciais</div>
+            </div>
+          </Card>
+
+          {/* Footer actions */}
+          <div className="flex items-center justify-between mt-7 pt-6 border-t border-border">
+            <Button variant="outline" onClick={handleBack} className="gap-2 h-11">
+              <ArrowLeft className="h-4 w-4" />
+              {stepIdx === 0 ? "Sair" : "Voltar"}
+            </Button>
+            <Button onClick={handleNext} disabled={!canContinue} className="gap-2 h-11 px-6">
+              {stepIdx + 1 === total ? "Concluir" : "Continuar"}
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
         </Card>
-      </main>
-    </div>
+
+        <div className="text-center mt-6">
+          <Link to="/" className="text-xs text-muted-foreground hover:text-foreground underline-offset-4 hover:underline">
+            ← Voltar à tela inicial
+          </Link>
+        </div>
+      </div>
+    </main>
   );
 };
 
-const ClassItem = ({ label, value }: { label: string; value: string }) => (
-  <div>
-    <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">{label}</div>
-    <div className="text-xs font-medium text-foreground">{value}</div>
-  </div>
+const YesNoButton = ({
+  selected, onClick, icon: Icon, label, tone,
+}: { selected: boolean; onClick: () => void; icon: any; label: string; tone: "success" | "muted" }) => (
+  <button
+    onClick={onClick}
+    className={`flex items-center justify-center gap-2 h-12 rounded-xl border-2 font-semibold text-sm transition-base ${
+      selected
+        ? tone === "success"
+          ? "border-success bg-success/10 text-success"
+          : "border-primary bg-primary/5 text-foreground"
+        : "border-border bg-card text-foreground hover:border-primary/40 hover:bg-muted/30"
+    }`}
+  >
+    <Icon className="h-4 w-4" />
+    {label}
+  </button>
 );
 
 export default Triagem;
