@@ -7,6 +7,7 @@ import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
 import Triagem from "./pages/Triagem.tsx";
+import TriagemFila from "./pages/TriagemFila.tsx";
 import DemandDetail from "./pages/DemandDetail.tsx";
 
 const queryClient = new QueryClient();
@@ -21,6 +22,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/triagem" element={<Triagem />} />
+          <Route path="/triagem-fila" element={<TriagemFila />} />
           <Route path="/demanda/:id" element={<DemandDetail />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
