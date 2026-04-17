@@ -179,22 +179,77 @@ const HubExterno = () => {
         pushIA(["Quase lá!", "**Qual é o seu principal objetivo hoje?**"]);
         break;
       case "resumo": {
-        const resumo = resumoIA(novasRespostas);
+        // Mensagem inicial enquanto a IA processa
         pushIA([
           "Perfeito! Deixa eu organizar o que entendi sobre você... 🤖✨",
-          "**Confirme se entendi corretamente suas necessidades:**",
-          resumo,
-          "Está tudo certo?",
         ]);
+        // Chama IA real (com fallback)
+        (async () => {
+          const data = await callIA<{ resumo: string }>("resumo", { respostas: novasRespostas });
+          const resumo = data?.resumo || resumoIA(novasRespostas);
+          // Pequeno atraso para parecer fluído
+          setTyping(true);
+          setTimeout(() => {
+            pushIAImediato("**Confirme se entendi corretamente suas necessidades:**");
+            setTimeout(() => {
+              pushIAImediato(resumo);
+              setTimeout(() => {
+                pushIAImediato("Está tudo certo?");
+                setTyping(false);
+              }, 500);
+            }, 500);
+          }, 1200);
+        })();
         break;
       }
       case "recomendacao": {
-        const progs = matchProgramas(novasRespostas);
-        setRecomendados(progs);
         pushIA([
           "Maravilha! Analisando seu perfil em nossa base de programas... 🔍",
-          `Com base no seu perfil, encontramos **${progs.length} oportunidades** ideais para você:`,
         ]);
+        (async () => {
+          const programasPayload = todosProgramas.map((p) => ({
+            id: p.id,
+            nome: p.nome,
+            descricao: p.descricao,
+            tag: p.tag,
+            categorias: p.categorias,
+          }));
+          const data = await callIA<{
+            mensagemAbertura: string;
+            recomendacoes: { id: string; justificativa: string }[];
+          }>("recomendacao", { respostas: novasRespostas, programas: programasPayload });
+
+          let progs: Programa[];
+          let abertura: string;
+          const justifMap: Record<string, string> = {};
+
+          if (data?.recomendacoes?.length) {
+            progs = data.recomendacoes
+              .map((r) => {
+                const p = todosProgramas.find((pp) => pp.id === r.id);
+                if (p) justifMap[p.id] = r.justificativa;
+                return p;
+              })
+              .filter((p): p is Programa => Boolean(p));
+            abertura =
+              data.mensagemAbertura ||
+              `Com base no seu perfil, encontramos **${progs.length} oportunidades** ideais para você:`;
+          } else {
+            // Fallback determinístico
+            progs = matchProgramas(novasRespostas);
+            abertura = `Com base no seu perfil, encontramos **${progs.length} oportunidades** ideais para você:`;
+          }
+
+          setJustificativas(justifMap);
+          setRecomendados(progs);
+          setTyping(true);
+          setTimeout(() => {
+            pushIAImediato(abertura);
+            setTyping(false);
+            // Avança para plano após pequena pausa
+            setTimeout(() => advance("plano", novasRespostas), 1500);
+          }, 1000);
+        })();
         break;
       }
       case "plano":
