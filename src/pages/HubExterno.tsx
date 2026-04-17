@@ -494,7 +494,11 @@ const HubExterno = () => {
           {!typing && (step === "recomendacao" || step === "plano") && recomendados.length > 0 && (
             <div className="grid sm:grid-cols-2 gap-3 mt-2 animate-fade-in">
               {recomendados.map((p) => (
-                <ProgramaCard key={p.id} programa={p} />
+                <ProgramaCard
+                  key={p.id}
+                  programa={p}
+                  justificativa={justificativas[p.id]}
+                />
               ))}
             </div>
           )}
@@ -658,7 +662,13 @@ const ChoiceBtn = ({
   </Button>
 );
 
-const ProgramaCard = ({ programa }: { programa: Programa }) => (
+const ProgramaCard = ({
+  programa,
+  justificativa,
+}: {
+  programa: Programa;
+  justificativa?: string;
+}) => (
   <Card className="p-4 border-border hover:border-success/40 hover:shadow-elegant transition-base group">
     <div className="flex items-start justify-between mb-2 gap-2">
       <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-accent/20 text-accent-foreground">
@@ -672,6 +682,12 @@ const ProgramaCard = ({ programa }: { programa: Programa }) => (
     <p className="text-xs text-muted-foreground leading-relaxed mb-3">
       {programa.descricao}
     </p>
+    {justificativa && (
+      <div className="text-[11px] leading-relaxed bg-success/10 border-l-2 border-success/50 pl-2 py-1.5 rounded-r mb-3 text-foreground/80 italic">
+        <span className="font-semibold not-italic text-success">✨ Por que para você: </span>
+        {justificativa}
+      </div>
+    )}
     <Button
       size="sm"
       variant="outline"
