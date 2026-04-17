@@ -19,9 +19,12 @@ import { Card } from "@/components/ui/card";
 import {
   matchProgramas,
   resumoIA,
+  programas as todosProgramas,
   type Programa,
   type RespostasExterno,
 } from "@/data/programasExternos";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 type Step =
   | "nome"
@@ -69,6 +72,7 @@ const HubExterno = () => {
   const [respostas, setRespostas] = useState<RespostasExterno>(initialRespostas);
   const [input, setInput] = useState("");
   const [recomendados, setRecomendados] = useState<Programa[]>([]);
+  const [justificativas, setJustificativas] = useState<Record<string, string>>({});
   const [typing, setTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -94,7 +98,7 @@ const HubExterno = () => {
       setTimeout(() => {
         setMessages((prev) => [
           ...prev,
-          { id: `ia-${Date.now()}-${i}`, from: "ia", text: t, ts: Date.now() },
+          { id: `ia-${Date.now()}-${i}-${Math.random()}`, from: "ia", text: t, ts: Date.now() },
         ]);
         if (i === texts.length - 1) setTyping(false);
       }, delay);
@@ -102,11 +106,49 @@ const HubExterno = () => {
     });
   };
 
+  const pushIAImediato = (text: string) => {
+    setMessages((prev) => [
+      ...prev,
+      { id: `ia-${Date.now()}-${Math.random()}`, from: "ia", text, ts: Date.now() },
+    ]);
+  };
+
   const pushUser = (text: string) => {
     setMessages((prev) => [
       ...prev,
       { id: `user-${Date.now()}`, from: "user", text, ts: Date.now() },
     ]);
+  };
+
+  // Chama a edge function hub-externo-ai
+  const callIA = async <T,>(action: "resumo" | "recomendacao", body: object): Promise<T | null> => {
+    try {
+      const { data, error } = await supabase.functions.invoke("hub-externo-ai", {
+        body: { action, ...body },
+      });
+      if (error) {
+        console.error(`IA ${action} error:`, error);
+        const status = (error as { context?: { status?: number } })?.context?.status;
+        if (status === 429) {
+          toast({
+            title: "Muitas requisições",
+            description: "Aguarde um instante e tente novamente.",
+            variant: "destructive",
+          });
+        } else if (status === 402) {
+          toast({
+            title: "Créditos da IA esgotados",
+            description: "Adicione créditos no workspace Lovable para continuar.",
+            variant: "destructive",
+          });
+        }
+        return null;
+      }
+      return data as T;
+    } catch (e) {
+      console.error(`IA ${action} exception:`, e);
+      return null;
+    }
   };
 
   const advance = (next: Step, novasRespostas: RespostasExterno) => {
