@@ -82,7 +82,7 @@ const Index = () => {
 
             {/* Acesso Externo */}
             <Link
-              to="/triagem?tipo=externo"
+              to="/hub-externo"
               className="group relative overflow-hidden rounded-2xl border border-border hover:border-success/60 p-7 shadow-card hover:shadow-elegant transition-base focus:outline-none focus:ring-4 focus:ring-success/30"
               style={{ background: "linear-gradient(180deg, hsl(60 50% 97%), hsl(var(--card)))" }}
             >

@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard.tsx";
 import Triagem from "./pages/Triagem.tsx";
 import TriagemFila from "./pages/TriagemFila.tsx";
 import DemandDetail from "./pages/DemandDetail.tsx";
+import HubExterno from "./pages/HubExterno.tsx";
 
 const queryClient = new QueryClient();
 
@@ -24,6 +25,7 @@ const App = () => (
           <Route path="/triagem" element={<Triagem />} />
           <Route path="/triagem-fila" element={<TriagemFila />} />
           <Route path="/demanda/:id" element={<DemandDetail />} />
+          <Route path="/hub-externo" element={<HubExterno />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
