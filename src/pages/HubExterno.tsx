@@ -19,9 +19,12 @@ import { Card } from "@/components/ui/card";
 import {
   matchProgramas,
   resumoIA,
+  programas as todosProgramas,
   type Programa,
   type RespostasExterno,
 } from "@/data/programasExternos";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 type Step =
   | "nome"
@@ -69,6 +72,7 @@ const HubExterno = () => {
   const [respostas, setRespostas] = useState<RespostasExterno>(initialRespostas);
   const [input, setInput] = useState("");
   const [recomendados, setRecomendados] = useState<Programa[]>([]);
+  const [justificativas, setJustificativas] = useState<Record<string, string>>({});
   const [typing, setTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -94,7 +98,7 @@ const HubExterno = () => {
       setTimeout(() => {
         setMessages((prev) => [
           ...prev,
-          { id: `ia-${Date.now()}-${i}`, from: "ia", text: t, ts: Date.now() },
+          { id: `ia-${Date.now()}-${i}-${Math.random()}`, from: "ia", text: t, ts: Date.now() },
         ]);
         if (i === texts.length - 1) setTyping(false);
       }, delay);
@@ -102,11 +106,49 @@ const HubExterno = () => {
     });
   };
 
+  const pushIAImediato = (text: string) => {
+    setMessages((prev) => [
+      ...prev,
+      { id: `ia-${Date.now()}-${Math.random()}`, from: "ia", text, ts: Date.now() },
+    ]);
+  };
+
   const pushUser = (text: string) => {
     setMessages((prev) => [
       ...prev,
       { id: `user-${Date.now()}`, from: "user", text, ts: Date.now() },
     ]);
+  };
+
+  // Chama a edge function hub-externo-ai
+  const callIA = async <T,>(action: "resumo" | "recomendacao", body: object): Promise<T | null> => {
+    try {
+      const { data, error } = await supabase.functions.invoke("hub-externo-ai", {
+        body: { action, ...body },
+      });
+      if (error) {
+        console.error(`IA ${action} error:`, error);
+        const status = (error as { context?: { status?: number } })?.context?.status;
+        if (status === 429) {
+          toast({
+            title: "Muitas requisições",
+            description: "Aguarde um instante e tente novamente.",
+            variant: "destructive",
+          });
+        } else if (status === 402) {
+          toast({
+            title: "Créditos da IA esgotados",
+            description: "Adicione créditos no workspace Lovable para continuar.",
+            variant: "destructive",
+          });
+        }
+        return null;
+      }
+      return data as T;
+    } catch (e) {
+      console.error(`IA ${action} exception:`, e);
+      return null;
+    }
   };
 
   const advance = (next: Step, novasRespostas: RespostasExterno) => {
@@ -137,22 +179,77 @@ const HubExterno = () => {
         pushIA(["Quase lá!", "**Qual é o seu principal objetivo hoje?**"]);
         break;
       case "resumo": {
-        const resumo = resumoIA(novasRespostas);
+        // Mensagem inicial enquanto a IA processa
         pushIA([
           "Perfeito! Deixa eu organizar o que entendi sobre você... 🤖✨",
-          "**Confirme se entendi corretamente suas necessidades:**",
-          resumo,
-          "Está tudo certo?",
         ]);
+        // Chama IA real (com fallback)
+        (async () => {
+          const data = await callIA<{ resumo: string }>("resumo", { respostas: novasRespostas });
+          const resumo = data?.resumo || resumoIA(novasRespostas);
+          // Pequeno atraso para parecer fluído
+          setTyping(true);
+          setTimeout(() => {
+            pushIAImediato("**Confirme se entendi corretamente suas necessidades:**");
+            setTimeout(() => {
+              pushIAImediato(resumo);
+              setTimeout(() => {
+                pushIAImediato("Está tudo certo?");
+                setTyping(false);
+              }, 500);
+            }, 500);
+          }, 1200);
+        })();
         break;
       }
       case "recomendacao": {
-        const progs = matchProgramas(novasRespostas);
-        setRecomendados(progs);
         pushIA([
           "Maravilha! Analisando seu perfil em nossa base de programas... 🔍",
-          `Com base no seu perfil, encontramos **${progs.length} oportunidades** ideais para você:`,
         ]);
+        (async () => {
+          const programasPayload = todosProgramas.map((p) => ({
+            id: p.id,
+            nome: p.nome,
+            descricao: p.descricao,
+            tag: p.tag,
+            categorias: p.categorias,
+          }));
+          const data = await callIA<{
+            mensagemAbertura: string;
+            recomendacoes: { id: string; justificativa: string }[];
+          }>("recomendacao", { respostas: novasRespostas, programas: programasPayload });
+
+          let progs: Programa[];
+          let abertura: string;
+          const justifMap: Record<string, string> = {};
+
+          if (data?.recomendacoes?.length) {
+            progs = data.recomendacoes
+              .map((r) => {
+                const p = todosProgramas.find((pp) => pp.id === r.id);
+                if (p) justifMap[p.id] = r.justificativa;
+                return p;
+              })
+              .filter((p): p is Programa => Boolean(p));
+            abertura =
+              data.mensagemAbertura ||
+              `Com base no seu perfil, encontramos **${progs.length} oportunidades** ideais para você:`;
+          } else {
+            // Fallback determinístico
+            progs = matchProgramas(novasRespostas);
+            abertura = `Com base no seu perfil, encontramos **${progs.length} oportunidades** ideais para você:`;
+          }
+
+          setJustificativas(justifMap);
+          setRecomendados(progs);
+          setTyping(true);
+          setTimeout(() => {
+            pushIAImediato(abertura);
+            setTyping(false);
+            // Avança para plano após pequena pausa
+            setTimeout(() => advance("plano", novasRespostas), 1500);
+          }, 1000);
+        })();
         break;
       }
       case "plano":
@@ -239,14 +336,15 @@ const HubExterno = () => {
 
   const handleConfirmar = () => {
     pushUser("Sim, está correto ✅");
+    // O case "recomendacao" já avança para "plano" após receber a resposta da IA
     advance("recomendacao", respostas);
-    setTimeout(() => advance("plano", respostas), 1800);
   };
 
   const handleEditar = () => {
     pushUser("Quero editar minhas respostas");
     setRespostas(initialRespostas);
     setRecomendados([]);
+    setJustificativas({});
     setMessages([]);
     setStep("nome");
     setTimeout(() => {
@@ -396,7 +494,11 @@ const HubExterno = () => {
           {!typing && (step === "recomendacao" || step === "plano") && recomendados.length > 0 && (
             <div className="grid sm:grid-cols-2 gap-3 mt-2 animate-fade-in">
               {recomendados.map((p) => (
-                <ProgramaCard key={p.id} programa={p} />
+                <ProgramaCard
+                  key={p.id}
+                  programa={p}
+                  justificativa={justificativas[p.id]}
+                />
               ))}
             </div>
           )}
@@ -560,7 +662,13 @@ const ChoiceBtn = ({
   </Button>
 );
 
-const ProgramaCard = ({ programa }: { programa: Programa }) => (
+const ProgramaCard = ({
+  programa,
+  justificativa,
+}: {
+  programa: Programa;
+  justificativa?: string;
+}) => (
   <Card className="p-4 border-border hover:border-success/40 hover:shadow-elegant transition-base group">
     <div className="flex items-start justify-between mb-2 gap-2">
       <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-accent/20 text-accent-foreground">
@@ -574,6 +682,12 @@ const ProgramaCard = ({ programa }: { programa: Programa }) => (
     <p className="text-xs text-muted-foreground leading-relaxed mb-3">
       {programa.descricao}
     </p>
+    {justificativa && (
+      <div className="text-[11px] leading-relaxed bg-success/10 border-l-2 border-success/50 pl-2 py-1.5 rounded-r mb-3 text-foreground/80 italic">
+        <span className="font-semibold not-italic text-success">✨ Por que para você: </span>
+        {justificativa}
+      </div>
+    )}
     <Button
       size="sm"
       variant="outline"
