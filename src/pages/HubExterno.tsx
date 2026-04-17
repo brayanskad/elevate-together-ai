@@ -336,14 +336,15 @@ const HubExterno = () => {
 
   const handleConfirmar = () => {
     pushUser("Sim, está correto ✅");
+    // O case "recomendacao" já avança para "plano" após receber a resposta da IA
     advance("recomendacao", respostas);
-    setTimeout(() => advance("plano", respostas), 1800);
   };
 
   const handleEditar = () => {
     pushUser("Quero editar minhas respostas");
     setRespostas(initialRespostas);
     setRecomendados([]);
+    setJustificativas({});
     setMessages([]);
     setStep("nome");
     setTimeout(() => {
