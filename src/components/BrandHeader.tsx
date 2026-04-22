@@ -17,7 +17,7 @@ export const BrandHeader = ({ variant = "neutral", right }: BrandHeaderProps) =>
           </div>
           <div className="leading-tight">
             <div className="flex items-center gap-1.5">
-              <span className="font-bold text-foreground text-lg">InclusivAI</span>
+              <span className="font-bold text-foreground text-lg">Inclui+Petrobras</span>
               <Sparkles className="h-3.5 w-3.5 text-accent" />
             </div>
             <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">
