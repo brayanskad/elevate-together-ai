@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { Bell } from "lucide-react";
+import { Bell, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 
 interface InternalLayoutProps {
@@ -18,9 +18,15 @@ export const InternalLayout = ({ children, topbarRight, statusLabel = "Sistema e
 
         <div className="flex-1 flex flex-col min-w-0">
           <header className="h-14 flex items-center justify-between gap-3 px-4 border-b border-border bg-card sticky top-0 z-20">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <SidebarTrigger className="text-muted-foreground hover:text-foreground" />
-              <div className="hidden md:flex items-center gap-2 text-xs text-muted-foreground ml-2">
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-foreground text-sm tracking-tight">
+                  Inclui<span className="text-primary">+</span>Petrobras
+                </span>
+                <Sparkles className="h-3.5 w-3.5 text-accent" />
+              </div>
+              <div className="hidden md:flex items-center gap-2 text-xs text-muted-foreground ml-2 pl-3 border-l border-border">
                 <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
                 {statusLabel}
               </div>
